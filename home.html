@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Metal Detector — Sugarcane Inspection UI</title>
+  <style>
+    /* Reset & base */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#16a34a; --danger:#ef4444; --glass: rgba(255,255,255,0.04);
+      --glass-2: rgba(255,255,255,0.03);
+      --radius:12px; --fw-regular:400; --fw-semibold:600;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans",sans-serif;background:linear-gradient(180deg,#071029 0%, #071827 60%);color:#e6eef8}
+    a{color:inherit}
+
+    /* Layout */
+    .app{display:flex;min-height:100vh;gap:24px;padding:28px}
+    .sidebar{width:300px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:16px;padding:20px;border:1px solid rgba(255,255,255,0.03);backdrop-filter:blur(6px)}
+    .main{flex:1;display:flex;flex-direction:column;gap:18px}
+
+    /* Sidebar content */
+    .logo{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .logo .mark{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent), #22c55e);display:flex;align-items:center;justify-content:center;font-weight:700;color:#041014}
+    .logo h1{font-size:16px;margin:0}
+    .muted{color:var(--muted);font-size:13px}
+
+    .card{background:var(--card);padding:14px;border-radius:12px;border:1px solid var(--glass-2)}
+    .section{margin-bottom:14px}
+    .small{font-size:13px;color:var(--muted)}
+
+    .controls{display:flex;flex-direction:column;gap:10px}
+    label{font-size:13px}
+    input[type=file]{display:none}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;background:linear-gradient(180deg,#1f2937,#111827);border:1px solid rgba(255,255,255,0.04);cursor:pointer}
+    .btn.primary{background:linear-gradient(180deg,var(--accent),#059669);color:#03210f;border:none}
+    .btn.danger{background:linear-gradient(180deg,var(--danger),#ef4444);border:none}
+
+    .filedrop{border:2px dashed rgba(255,255,255,0.04);padding:16px;border-radius:10px;text-align:center;background:linear-gradient(180deg,transparent,rgba(255,255,255,0.01))}
+    .filemeta{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-family:var(--mono);font-size:13px}
+
+    /* Main top toolbar */
+    .toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .search{display:flex;gap:8px;align-items:center}
+    .search input{padding:10px 12px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.03);outline:none;color:inherit}
+
+    /* Dashboard grid */
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .wide{grid-column:span 2}
+
+    .stat{display:flex;flex-direction:column;gap:8px}
+    .stat .num{font-size:24px;font-weight:700}
+    .progress{height:10px;background:rgba(255,255,255,0.03);border-radius:10px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#22c55e);width:60%}
+
+    /* Table */
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.03)}
+    th{color:var(--muted);font-weight:600}
+
+    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:13px}
+
+    /* Scan animation */
+    .scanner{position:relative;height:220px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.03)}
+    .scanner .field{position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,0.01),rgba(255,255,255,0.01) 10px,transparent 10px,transparent 20px)}
+    .beam{position:absolute;left:0;right:0;height:40px;top:-40px;background:linear-gradient(180deg,transparent,rgba(34,197,94,0.12),transparent);animation:scan 3s linear infinite}
+    @keyframes scan{0%{top:-40px}50%{top:calc(100% - 20px)}100%{top:-40px}}
+
+    /* Responsive */
+    @media (max-width:1000px){.grid{grid-template-columns:repeat(1,1fr)}.sidebar{display:none}.app{padding:16px}}
+
+    /* Footer */
+    .footer{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;padding:10px 14px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar card">
+      <div class="logo">
+        <div class="mark">MD</div>
+        <div>
+          <h1>MetalDetect — Sugarcane</h1>
+          <div class="muted">Field inspection dashboard</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="small">Scan controls</div>
+        <div class="controls">
+          <label class="filedrop" id="dropArea">
+            <div style="font-weight:600">Drop sugarcane image or CSV here</div>
+            <div class="muted" style="margin-top:8px">(Images of samples or batch CSV of sensor readings)</div>
+            <input id="fileInput" type="file" accept="image/*,.csv" />
+          </label>
+
+          <div style="display:flex;gap:8px">
+            <button id="startBtn" class="btn primary">Start Scan</button>
+            <button id="stopBtn" class="btn">Stop</button>
+          </div>
+
+          <div class="filemeta" id="fileMeta">No file selected</div>
+        </div>
+      </div>
+
+      <div class="section card">
+        <div class="small">Live status</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+          <div>
+            <div class="num" id="statusLabel" style="font-size:18px;font-weight:700">Idle</div>
+            <div class="muted">Last scan: --</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">Detections</div>
+            <div class="num" id="detections">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="small">Export</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn" id="exportCsv">Export CSV</button>
+          <button class="btn" id="exportJson">Export JSON</button>
+        </div>
+      </div>
+
+      <div style="margin-top:18px" class="card">
+        <div class="small">About</div>
+        <div class="muted" style="margin-top:6px;font-size:13px">This UI simulates an on-field metal detector system for sugarcane inspection. It supports image and CSV inputs, live scan simulation, and export of results.</div>
+      </div>
+
+    </aside>
+
+    <main class="main">
+      <div class="toolbar card">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="chip">Sensor: <strong style="margin-left:6px">EM-420</strong></div>
+          <div class="chip">Mode: <strong style="margin-left:6px">Batch</strong></div>
+          <div class="muted">Location: <strong style="margin-left:6px">Field A - Sector 3</strong></div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="search card" style="padding:6px;display:flex;align-items:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity:0.8"><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input id="q" placeholder="Search sample id, batch or notes..." />
+          </div>
+          <div class="small">User: <strong>Field Operator</strong></div>
+        </div>
+      </div>
+
+      <section class="grid">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">Total Scanned</div>
+              <div class="num" id="totalScanned">0</div>
+            </div>
+            <div style="text-align:right">
+              <div class="small">Metal Found</div>
+              <div class="num" id="metalFound">0</div>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <div class="progress" aria-hidden><i id="progressBar"></i></div>
+          </div>
+        </div>
+
+        <div class="card stat">
+          <div class="small">Last Detection</div>
+          <div class="num" id="lastDetected">-</div>
+          <div class="muted">Confidence: <span id="lastConfidence">--</span></div>
+        </div>
+
+        <div class="card stat">
+          <div class="small">Battery</div>
+          <div class="num">84%</div>
+          <div class="muted">Range: 0.5m</div>
+        </div>
+
+        <div class="card wide">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">Scanner Field</div>
+              <div style="font-weight:700">Real-time scan (simulated)</div>
+            </div>
+            <div class="small">Speed: <strong id="speedLabel">Normal</strong></div>
+          </div>
+
+          <div class="scanner" style="margin-top:12px">
+            <div class="field"></div>
+            <div class="beam" id="beam"></div>
+            <canvas id="viz" width="800" height="220" style="display:block"></canvas>
+          </div>
+        </div>
+
+        <div class="card" style="padding-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="small">Recent Detections</div><div style="font-weight:700">Events</div></div>
+            <div><button class="btn" id="clearBtn">Clear</button></div>
+          </div>
+          <div style="margin-top:10px;max-height:260px;overflow:auto">
+            <table id="eventsTable">
+              <thead><tr><th>Time</th><th>Sample</th><th>Type</th><th>Size(mm)</th><th>Confidence</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="small">Batch Notes</div>
+          <textarea id="notes" rows="6" style="width:100%;margin-top:8px;border-radius:10px;padding:10px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:inherit"></textarea>
+        </div>
+
+      </section>
+
+      <div class="footer card">
+        <div>© MetalDetect UI — Sugarcane Inspection</div>
+        <div>v1.0 • Simulated</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ---------- Simple front-end simulation logic ----------
+    const fileInput = document.getElementById('fileInput');
+    const dropArea = document.getElementById('dropArea');
+    const fileMeta = document.getElementById('fileMeta');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const totalScanned = document.getElementById('totalScanned');
+    const metalFound = document.getElementById('metalFound');
+    const progressBar = document.getElementById('progressBar');
+    const eventsTableBody = document.querySelector('#eventsTable tbody');
+    const statusLabel = document.getElementById('statusLabel');
+    const detections = document.getElementById('detections');
+    const lastDetected = document.getElementById('lastDetected');
+    const lastConfidence = document.getElementById('lastConfidence');
+
+    let selectedFile = null;
+    let scanning = false;
+    let scanTimer = null;
+    let scannedCount = 0;
+    let metalCount = 0;
+
+    // Friendly drag & drop
+    ['dragenter','dragover'].forEach(evt=>dropArea.addEventListener(evt,(e)=>{e.preventDefault();dropArea.style.borderColor='rgba(34,197,94,0.6)'}));
+    ['dragleave','drop'].forEach(evt=>dropArea.addEventListener(evt,(e)=>{e.preventDefault();dropArea.style.borderColor='rgba(255,255,255,0.04)'}));
+    dropArea.addEventListener('drop',e=>{ const f = e.dataTransfer.files[0]; if(f) handleFile(f)});
+    fileInput.addEventListener('change',e=>handleFile(e.target.files[0]));
+
+    function handleFile(f){
+      selectedFile = f;
+      fileMeta.textContent = `${f.name} • ${Math.round(f.size/1024)} KB`;
+    }
+
+    startBtn.addEventListener('click',()=>{
+      if(scanning) return;
+      scanning = true; statusLabel.textContent='Scanning';
+      startBtn.classList.add('btn--active');
+      scanTimer = setInterval(simulateScan,1200);
+    });
+    stopBtn.addEventListener('click',()=>{
+      stopScan();
+    });
+    document.getElementById('clearBtn').addEventListener('click',()=>{eventsTableBody.innerHTML='';metalCount=0;metalFound.textContent='0';detections.textContent='0';});
+
+    function stopScan(){
+      scanning=false; statusLabel.textContent='Idle'; clearInterval(scanTimer); scanTimer=null;
+    }
+
+    function simulateScan(){
+      scannedCount++;
+      totalScanned.textContent = scannedCount;
+      // progress animation
+      const pct = Math.min(100, (scannedCount % 50) * 2);
+      progressBar.style.width = pct + '%';
+
+      // random detection logic (higher chance if file provided)
+      let chance = selectedFile ? 0.28 : 0.10;
+      const found = Math.random() < chance;
+      if(found){
+        metalCount++; metalFound.textContent = metalCount; detections.textContent = metalCount;
+        const now = new Date();
+        const time = now.toLocaleTimeString();
+        const sampleId = 'S-' + String(1000 + scannedCount);
+        const size = (Math.random()*30 + 1).toFixed(1);
+        const conf = (Math.random()*30 + 70).toFixed(1) + '%';
+        appendEvent(time, sampleId, 'Metal', size, conf);
+        lastDetected.textContent = sampleId;
+        lastConfidence.textContent = conf;
+      } else {
+        // append low-priority non-detections occasionally
+        if(Math.random() < 0.12){
+          const now = new Date();
+          appendEvent(now.toLocaleTimeString(), 'S-'+(1000+scannedCount), 'Clean', '-', '-');
+        }
+      }
+
+      // auto-stop example
+      if(scannedCount >= 200){ stopScan(); }
+    }
+
+    function appendEvent(time, sample, type, size, conf){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${time}</td><td>${sample}</td><td>${type}</td><td>${size}</td><td>${conf}</td>`;
+      eventsTableBody.prepend(tr);
+      // keep table reasonable
+      while(eventsTableBody.children.length > 200) eventsTableBody.removeChild(eventsTableBody.lastChild);
+    }
+
+    // Canvas viz (simple dots showing detected positions)
+    const canvas = document.getElementById('viz');
+    const ctx = canvas.getContext('2d');
+    function drawViz(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // draw grid sugarcane stalks representation
+      for(let x=0;x<canvas.width;x+=40){ ctx.fillStyle='rgba(255,255,255,0.02)'; ctx.fillRect(x,0,2,canvas.height);} 
+      // draw random metal points based on metalCount
+      for(let i=0;i<metalCount;i++){
+        const x = Math.random()*canvas.width;
+        const y = Math.random()*canvas.height;
+        ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fillStyle='rgba(239,68,68,0.9)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.strokeStyle='rgba(239,68,68,0.12)'; ctx.stroke();
+      }
+      requestAnimationFrame(drawViz);
+    }
+    drawViz();
+
+    // Export helpers
+    document.getElementById('exportCsv').addEventListener('click',()=>{
+      const rows = [['time','sample','type','size_mm','confidence']];
+      for(const r of eventsTableBody.querySelectorAll('tr')){
+        const cols = Array.from(r.children).map(td=>td.textContent);
+        rows.push(cols);
+      }
+      const csv = rows.map(r=>r.map(c=>`"${c.replace(/"/g,'""') }"`).join(',')).join('\n');
+      downloadBlob(csv,'detections.csv','text/csv');
+    });
+    document.getElementById('exportJson').addEventListener('click',()=>{
+      const items = [];
+      for(const r of eventsTableBody.querySelectorAll('tr')){
+        const [time,sample,type,size,conf] = Array.from(r.children).map(td=>td.textContent);
+        items.push({time,sample,type,size,confidence:conf});
+      }
+      downloadBlob(JSON.stringify(items, null, 2),'detections.json','application/json');
+    });
+
+    function downloadBlob(content, filename, mime){
+      const blob = new Blob([content],{type:mime});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    // simple keyboard shortcuts
+    window.addEventListener('keydown',e=>{
+      if(e.key === 's' && e.ctrlKey){ e.preventDefault(); startBtn.click(); }
+    });
+
+    // Initial sample data (for demo)
+    for(let i=0;i<6;i++){ simulateScan(); }
+  </script>
+</body>
+</html>
